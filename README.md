@@ -12,7 +12,7 @@ On Android, Playtest Demon keeps a configurable **0–30 second lookback** (10 s
 
 ## The workflow
 
-1. **Capture and speak.** On your laptop, click **Start playtest session**, paste the game link, share its tab/window and record your voice. **Start clip → Finish & send** includes the same 0–30 second lookback ([laptop guide](docs/LAPTOP.md)). On Android, start a Playtest Demon session on Android and play your game. Press **Volume Up** when you see something; press again to finish. **Volume Down** discards an active clip. On iPhone/iPad, record the screen with Microphone On, AirDrop to your Mac and use **Import recording** ([iOS guide](docs/IOS.md)).
+1. **Capture and speak.** On your laptop, click **Start playtest session**, paste the game link, share its tab/window and record your voice. **Start clip → Finish & send** includes the same 0–30 second lookback ([laptop guide](docs/LAPTOP.md)). On Android, start a Playtest Demon session and play your game. Press **Volume Up** when you see something; press again to finish. **Volume Down** discards an active clip. On iPhone/iPad, record the screen with Microphone On, AirDrop to your Mac and use **Import recording** ([iOS guide](docs/IOS.md)).
 2. **Follow the queue.** Videos appear automatically after transfer completes, even while another video is being analysed. The Live feed shows queued, extracting, transcribing, analysing, ready, and failed clips. Search by game, filter by status, pause the queue, or retry a failed clip.
 3. **Review one ticket.** Watch the relevant moment, edit the finding, inspect screenshots, then approve, reject, or leave it for later. Edits save automatically. Approval and rejection have Undo.
 4. **Run a batch.** Approved requests collect by game. Paste your GitHub game repository link, review the detected branch/checks and fixing CLI/model/effort, then click **Send batch to agent**. Each batch gets a fresh clone, a `playtest/…` branch, approved evidence, verification and a PR. Copy prompt remains available and does not submit or consume the batch.
@@ -33,7 +33,7 @@ On Android **0.7.0 or newer**, choose **Playtest mode → Record & share**. No M
 3. Stop the session. Tap **Share a saved batch**, choose the session, then use Android’s share sheet to send its ZIP through Slack, email or another file-sharing app.
 4. The recipient opens **Playtest Demon 0.7.0+ on their Mac**, clicks **Import batch**, and selects the ZIP. The game names, voice, build version and reaction/lookback timing travel with the recordings. Their configured analyst processes the clips through the normal review flow; a paused queue stays paused.
 
-Each phone-only session is a separate batch. Saved batches survive restarts, remain on the phone after sharing and never enter the automatic Mac upload queue—even if you later pair a laptop or switch modes. Previously queued laptop-sync clips retain their original destination. The phone does not analyse recordings; the recipient needs the usual desktop tools and CLI login.
+Each phone-only session is a separate batch of up to 100 clips; start a new session when the phone says the batch is full. Saved batches survive restarts, remain on the phone after sharing and never enter the automatic Mac upload queue—even if you later pair a laptop or switch modes. Previously queued laptop-sync clips retain their original destination. The phone does not analyse recordings; the recipient needs the usual desktop tools and CLI login.
 
 Batch ZIPs contain only recordings and their recording metadata, with no pairing keys, receiver identity or CLI settings. Import validates the whole batch before publishing it to the queue. Repeated or concurrent imports skip recordings already received; an explicitly reimported recording in trash becomes a new queue item. Limits: 100 clips / 2 GB per ZIP, 750 MB and 10 minutes per imported recording. Large sessions appear as numbered parts in the share picker; share and import each part. Share only recordings and microphone audio you intend the recipient to receive. Batches are kept in Android’s app storage and consume space until you remove the app’s data; the app does not automatically delete them after sharing.
 
@@ -41,17 +41,17 @@ Batch ZIPs contain only recordings and their recording metadata, with no pairing
 
 Give Codex or Claude Code this prompt:
 
-> Install Playtest Demon from https://github.com/guilhermea-infinity/playtest-demon on my Mac and Android phone. Read AGENTS.md and docs/INSTALL-AGENT.md first. Inspect existing tools and preserve my clips and settings. Ask which CLI and model I want to use, install the missing dependencies, download the current prebuilt Android APK (or build it if needed), and install it on my chosen USB-connected phone. Walk me through the Android permissions and verify a short test clip reaches Playtest Demon and becomes a reviewable ticket. Leave me the launch command and explain anything you could not verify.
+> Install Playtest Demon from https://github.com/webavenue/playtest-demon on my Mac and Android phone. Read AGENTS.md and docs/INSTALL-AGENT.md first. Inspect existing tools and preserve my clips and settings. Ask which CLI and model I want to use, install the missing dependencies, download the current prebuilt Android APK (or build it if needed), and install it on my chosen USB-connected phone. Walk me through the Android permissions and verify a short test clip reaches Playtest Demon and becomes a reviewable ticket. Leave me the launch command and explain anything you could not verify.
 
 The detailed [agent installation runbook](docs/INSTALL-AGENT.md) includes prerequisites, exact commands, human permission steps, verification, and recovery. iPhone/iPad imports use Apple’s built-in recorder; no iOS app installation is required. Windows and Linux desktops are not supported.
 
 ## Open it like a Mac app
 
-Download the **macOS app / DMG** from [Releases](https://github.com/guilhermea-infinity/playtest-demon/releases). Open the DMG, drag **Playtest Demon.app** into **Applications**, and double-click it. The desk opens in its own window with a Dock icon; no Terminal command or browser tab is required for daily use.
+Download the **macOS app / DMG** from [Releases](https://github.com/webavenue/playtest-demon/releases). Open the DMG, drag **Playtest Demon.app** into **Applications**, and double-click it. The desk opens in its own window with a Dock icon; no Terminal command or browser tab is required for daily use. **Import batch** and **Share feedback** need 0.7.0; if Releases does not list 0.7.0 yet, [build the app](#build-the-mac-app) from source.
 
 The app includes Python, Pillow and jsonschema. On a new Mac, ffmpeg, whisper with its voice model, the chosen CLI/login, and GitHub/Android tools still need the [initial setup](docs/INSTALL-AGENT.md). The current downloadable app is for **Apple Silicon, macOS 14+**; Intel users can build it on an Intel Mac using the packaging script below. It is locally signed; another Mac may need **System Settings → Privacy & Security → Open Anyway** because it is not Apple-notarized.
 
-Close the window to keep receiving in the background; click the Dock icon to bring it back. **⌘Q / Playtest Demon → Quit** stops the desk and its receiver. The app warns about in-progress work and unsaved edits. Use its menu to open the inbox, logs or browser version. Logs live in `~/Library/Logs/Playtest Demon/`; data remains in `~/Desktop/QA-Inbox` and existing phone pairing/model choices are reused.
+Close the window to keep receiving in the background; click the Dock icon to bring it back. **⌘Q / Playtest Demon → Quit** stops the desk and its receiver. The app warns about in-progress work and unsaved edits. Use its menu to open the inbox, logs or browser version. Logs live in `~/Library/Logs/Playtest Demon/`; data remains in `~/Desktop/QA-Inbox` and existing phone pairing/model choices are reused. To keep the inbox on another drive, make `~/Desktop/QA-Inbox` a symlink to that folder before the first launch (for example `ln -s /Volumes/Drive/QA-Inbox ~/Desktop/QA-Inbox`); the desk then works only while the drive is mounted.
 
 ## Playtest a browser game on your laptop
 
@@ -66,7 +66,7 @@ Each tester currently needs their own running local Playtest Demon installation 
 ## Manual quick start (source / agents)
 
 ```bash
-git clone https://github.com/guilhermea-infinity/playtest-demon.git
+git clone https://github.com/webavenue/playtest-demon.git
 cd playtest-demon
 bash scripts/setup-mac.sh --brew
 ```
@@ -118,7 +118,7 @@ This downloads roughly 466 MB. Alternatively set `QA_WHISPER_MODEL=/absolute/pat
 
 ### Install on Android
 
-For a prebuilt APK, download it from [Releases](https://github.com/guilhermea-infinity/playtest-demon/releases), verify the published SHA-256, and put it in `out/`. Or build locally:
+For a prebuilt APK, download it from [Releases](https://github.com/webavenue/playtest-demon/releases), verify the published SHA-256, and put it in `out/`. The repository also includes `out/PlaytestDemon-0.7.0.apk`. A prebuilt APK and one built on your Mac are signed with different keys and cannot update each other; keep using the same source for a phone. Or build locally:
 
 1. Install Android Studio, then SDK Platform **36** and Build Tools **35.0.0** in SDK Manager. Java 21 was installed by the setup script.
 2. Set `ANDROID_HOME` if the SDK is not at `~/Library/Android/sdk`.
@@ -204,7 +204,7 @@ playtest-demon/
   scripts/                setup and prerequisite checker
   tests/                  queue, provider, review and HTTP regression tests
   docs/INSTALL-AGENT.md   complete installation runbook
-  out/                    locally built APKs (ignored by Git)
+  out/                    build outputs (ignored by Git, except the included release APK)
 
 ~/Desktop/QA-Inbox/
   <Game>/                 videos and metadata
@@ -216,6 +216,7 @@ playtest-demon/
   Tickets/.work/          extracted frames, transcript, prompt, provider output
   Handoffs/               earlier saved prompts
   Imports/                imported iOS/desktop recordings
+  Imports/batch-*/        imported Android batches and their arrival receipts
   Tickets/repositories.json game-to-repository and fixing-agent settings
   Tickets/runs.json       durable batch lifecycle and PR status
   AgentRuns/<RUN-ID>/     approved snapshot, isolated clone, logs and PR body

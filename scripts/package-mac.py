@@ -79,7 +79,7 @@ def main():
     staging.mkdir()
     run('ditto', bundle, staging/bundle.name)
     (staging/'Applications').symlink_to('/Applications', target_is_directory=True)
-    (staging/'Start here.txt').write_text('Drag Playtest Demon into Applications, then double-click it.\nClose the window to keep receiving clips; Cmd+Q quits.\nExisting data stays in ~/Desktop/QA-Inbox.\nApple Silicon build. First-time Mac dependencies/CLI login still need setup.\nProject setup: https://github.com/guilhermea-infinity/playtest-demon#install-with-your-agent\nLocally signed, not Apple-notarized. On another Mac, macOS may require Privacy & Security > Open Anyway.\n')
+    (staging/'Start here.txt').write_text('Drag Playtest Demon into Applications, then double-click it.\nClose the window to keep receiving clips; Cmd+Q quits.\nExisting data stays in ~/Desktop/QA-Inbox.\nApple Silicon build. First-time Mac dependencies/CLI login still need setup.\nProject setup: https://github.com/webavenue/playtest-demon#install-with-your-agent\nLocally signed, not Apple-notarized. On another Mac, macOS may require Privacy & Security > Open Anyway.\n')
     disk = output/f'Playtest-Demon-{VERSION}-macOS-{platform.machine()}.dmg'
     if disk.exists(): disk.unlink()
     run('hdiutil', 'create', '-volname', 'Playtest Demon', '-srcfolder', staging, '-ov', '-format', 'UDZO', disk)
