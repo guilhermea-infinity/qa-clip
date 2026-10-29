@@ -183,7 +183,8 @@ class Analyst(threading.Thread):
             self.frames(clip, work)
             step = self.sheet(work, dur, pressed, w, h)
 
-            preview = str(next((work / "frames").glob("*.jpg")).relative_to(st.inbox))
+            # Path.glob also matches dotfiles: skip AppleDouble ._ sidecars on exFAT/network inboxes.
+            preview = str(sorted((work / "frames").glob("t*.jpg"))[0].relative_to(st.inbox))
             st.set_clip(rel, step="Transcribing audio", preview=preview)
             transcript = self.transcribe(clip, work) if meta.get("voice", True) else None
 
