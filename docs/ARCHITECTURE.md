@@ -26,11 +26,21 @@ There is intentionally no worker pool. This keeps model usage bounded, draft IDs
 
 The loopback HTTP server exposes state, settings, ticket transitions, handoffs and byte-range media playback. The browser polls state every 1.5 seconds and preserves the active form instead of rebuilding it on each update. Settings and queue pause persist per inbox.
 
+`desk_share.py` provides read-only teammate exports, independently of agent handoffs. The UI flushes edits before opening the selection dialog; `POST /api/share-preview` validates explicit request IDs and returns a compact Slack summary (game heading and one bullet per finding). Detailed feedback remains in the HTML and Markdown reports; slack.txt uses the same short summary. `GET /api/share.zip` snapshots those requests under the Store lock, then builds a temporary disk-backed ZIP outside the lock and streams it to the client. Approved, draft, sent, fixing, fixed and verified requests can be selected; rejected, deleted and linked duplicate findings are excluded. The archive contains an escaped, script-free HTML report, Markdown, Slack text and only selected screenshots plus optional recordings. Evidence paths resolve inside the inbox, must have an allowed media extension, and are renamed to relative portable paths. Missing/unsafe evidence is reported. Exports never mark requests sent, reserve batches or copy settings, raw provider output or credentials. WKDownload uses an NSSavePanel in the native app; browsers use their normal attachment download handling.
+
 Ticket states: draft → approved/rejected; either can return to draft. An exported handoff moves its approved tickets to sent; Undo restores them. Handoff filenames include a unique ID, avoiding collisions for repeated exports in the same minute. Handoffs are local Markdown, not remote messages or GitHub issues.
 
 ## Boundaries
 
 The receiver is reachable on the local network; the review server is loopback-only and checks Host/Origin. Media paths must stay inside the inbox. Pairing uses device keys, but Wi-Fi transport is not encrypted; use a trusted network or USB. The selected provider receives extracted images/transcript/context. Local logs and inbox files may contain private content and are excluded from Git.
+
+## Phone-only recording batches
+
+Android's **Record & share** mode snapshots a local session into `batches/<UUID>/`, separate from `outbox/` and `sent/`. Recordings keep the same volume-button triggers, voice and lookback. Mode changes and sharing wait until the recorder and final save are finished. The uploader does not discover/reach/sync while this mode is selected; switching modes never adopts standalone recordings into a laptop route. Pairing and old outbox ownership remain intact.
+
+`Batches` creates a ZIP using the JVM-testable `BatchArchive` writer: `manifest.json` (`format: playtest-demon-batch`, version 1, UUID and per-clip metadata) plus `clips/001.mp4` etc. Metadata uses an explicit allowlist without pairing keys or receiver IDs. The non-exported `BatchProvider` grants selected share targets read-only access to a completed cached ZIP; it cannot open arbitrary paths or write files. Original recordings are retained after sharing and no successful-delivery claim is made for opening the share sheet.
+
+The desktop **Import batch** path streams to a temporary directory (2 GB / 100 clips), validates the manifest, unique exact ZIP members, paths, entry types, expanded sizes, actual video/audio and timing, then publishes one complete directory atomically. No arbitrary archive extraction or sender settings are accepted. The durable `Imports/batch-*/arrivals.json` receipt lets `Store.sync_inbox` recover all clips after an interruption without relying on a partially appended shared log. Per-recording hashes include the original game/timing and content; concurrent imports deduplicate under the Store lock. Queue state, trash and the selected analyst are preserved. These imports are Android recordings, so the analyst retains volume-button/lookback interpretation.
 
 ## iOS / desktop import
 

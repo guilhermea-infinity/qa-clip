@@ -19,6 +19,9 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
 
+        <provider android:name=".BatchProvider" android:authorities="${applicationId}.batches"
+            android:exported="false" android:grantUriPermissions="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

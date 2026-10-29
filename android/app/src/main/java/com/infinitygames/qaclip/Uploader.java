@@ -58,7 +58,6 @@ final class Uploader {
     private Uploader(Context c) {
         ctx = c;
         sp = c.getSharedPreferences("qaclip", 0);
-        discover();
         Thread t = new Thread(this::loop, "qaclip-upload");
         t.setDaemon(true);
         t.start();
@@ -74,7 +73,8 @@ final class Uploader {
         while (true) {
             try {
                 File[] clips = Clips.waiting(ctx);
-                Target mac = reach();
+                if (!Batches.standalone(ctx) && nsd == null) discover();
+                Target mac = Batches.standalone(ctx) ? null : reach();
                 if (mac != null) {
                     for (File f : clips) if (!send(mac, f)) break;
                     syncGames(mac);
@@ -180,7 +180,7 @@ final class Uploader {
     }
 
     private void syncGames(Target target) {
-        if (!target.id.equals(macId())) return;
+        if (Batches.standalone(ctx) || !target.id.equals(macId())) return;
         HttpURLConnection c = null;
         try {
             Set<String> pending = Games.pending(ctx);
@@ -218,7 +218,7 @@ final class Uploader {
         try {
             String meta;
             synchronized (routeLock) {
-                if (!target.id.equals(macId())) return false;
+                if (Batches.standalone(ctx) || !target.id.equals(macId())) return false;
                 if (!js.exists()) return true; // recorder has not finished writing metadata yet
                 JSONObject j = new JSONObject(new String(Files.readAllBytes(js.toPath()), StandardCharsets.UTF_8));
                 MacRoute route = new MacRoute(macCode(), target.id);

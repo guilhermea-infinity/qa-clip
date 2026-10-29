@@ -24,6 +24,19 @@ On Android, Playtest Demon keeps a configurable **0–30 second lookback** (10 s
 
 Analysis runs **one video at a time**, in arrival order. Receiving, queue updates, and ticket review continue independently. Quitting Playtest Demon stops processing; unfinished work is queued again on the next launch. Closing only its Mac window keeps it running. Pausing lets the current analysis finish and holds subsequent videos.
 
+## Record on Android without a laptop
+
+On Android **0.7.0 or newer**, choose **Playtest mode → Record & share**. No Mac pairing, Wi-Fi or CLI account is needed on the phone.
+
+1. Choose your game and start a session. Approve Android screen recording and microphone access as usual.
+2. Play and use **Volume Up** to start a clip, speak your feedback, then press it again to save. Lookback and **Volume Down** discard work as before.
+3. Stop the session. Tap **Share a saved batch**, choose the session, then use Android’s share sheet to send its ZIP through Slack, email or another file-sharing app.
+4. The recipient opens **Playtest Demon 0.7.0+ on their Mac**, clicks **Import batch**, and selects the ZIP. The game names, voice, build version and reaction/lookback timing travel with the recordings. Their configured analyst processes the clips through the normal review flow; a paused queue stays paused.
+
+Each phone-only session is a separate batch. Saved batches survive restarts, remain on the phone after sharing and never enter the automatic Mac upload queue—even if you later pair a laptop or switch modes. Previously queued laptop-sync clips retain their original destination. The phone does not analyse recordings; the recipient needs the usual desktop tools and CLI login.
+
+Batch ZIPs contain only recordings and their recording metadata, with no pairing keys, receiver identity or CLI settings. Import validates the whole batch before publishing it to the queue. Repeated or concurrent imports skip recordings already received; an explicitly reimported recording in trash becomes a new queue item. Limits: 100 clips / 2 GB per ZIP, 750 MB and 10 minutes per imported recording. Large sessions appear as numbered parts in the share picker; share and import each part. Share only recordings and microphone audio you intend the recipient to receive. Batches are kept in Android’s app storage and consume space until you remove the app’s data; the app does not automatically delete them after sharing.
+
 ## Install with your agent
 
 Give Codex or Claude Code this prompt:
@@ -137,6 +150,14 @@ Review highlights likely repeat requests. **Link duplicate** removes the extra f
 The feed distinguishes **Desk online**, **receiver ready**, and the last authenticated **phone contact**. A ready receiver alone does not mean a phone is connected. Estimates use the median of recent completed analyses, appear after three samples, and show a range rather than a promise.
 
 ## Review controls
+
+### Share feedback with your team
+
+Click **Share feedback** at the top of the workspace to export feedback for the selected game (or all games). **Share feedback** on an approved-batch card selects that game’s approved requests, even when the game picker is set to All games. **Share request** on a review ticket selects that finding. Choose which requests to include; approved requests are selected initially when available, and drafts are clearly labelled **not yet approved**.
+
+Use **Copy for Slack** for a short message: the game name and one bullet per finding. Drafts are labelled. Use **Download ZIP** for the full observations, expected behavior, reproduction steps, acceptance criteria and evidence, then attach the ZIP to your Slack message. The Mac app offers a save dialog; the browser version downloads the file. Sharing does not post to Slack or change ticket approvals, batches or fix runs.
+
+Your teammate extracts the ZIP and opens **report.html** in a browser. No Playtest Demon installation, login or connection to your Mac is required. The archive also includes **feedback.md**, **slack.txt**, selected screenshots and, by default, recordings. Turn off **Include video recordings** for a smaller attachment. Recordings shared by multiple requests appear once. Dropped screenshots are excluded, and missing evidence is listed in the report. Only select feedback and recordings you intend to share; the recordings retain their audio.
 
 | Action | Control |
 | --- | --- |

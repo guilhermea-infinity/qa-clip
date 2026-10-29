@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="keys_desc">Lets Playtest Demon use the volume buttons while you play: Vol + saves your configured lookback (0–30 seconds) and keeps recording, Vol + again stops and sends the clip to your Mac, Vol − while recording throws it away. Only active during a Playtest Demon session; otherwise the buttons work as normal. It reads nothing on screen except which app is open, to name the clip.</string>
+    <string name="keys_desc">Lets Playtest Demon use the volume buttons while you play: Vol + saves your configured lookback (0–30 seconds) and keeps recording, Vol + again stops and saves the clip, Vol − while recording throws it away. In Record &amp; share mode, clips stay on the phone for sharing later. In Sync to my Mac mode, they go to your paired laptop. Only active during a Playtest Demon session; otherwise the buttons work as normal. It reads nothing on screen except which app is open, to name the clip.</string>
 </resources>

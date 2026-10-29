@@ -137,7 +137,13 @@ class Store:
         try:
             lines = log.read_text().splitlines()
         except FileNotFoundError:
-            return 0
+            lines = []
+        for receipt in sorted((self.inbox / 'Imports').glob('batch-*/arrivals.json')):
+            if receipt.stat().st_size > 1 << 20:
+                continue
+            arrivals = read_json(receipt, [])
+            if isinstance(arrivals, list) and len(arrivals) <= 100:
+                lines.extend(json.dumps(m) for m in arrivals)
         new = 0
         with self.lock:
             for line in lines:

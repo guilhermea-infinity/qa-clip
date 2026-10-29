@@ -141,3 +141,8 @@ Give the owner the repository path, inbox path, chosen CLI/model, exact launch c
 Data lives outside Git. Back up the inbox separately. Delete neither the inbox nor `~/.config/qa-clip/devices.json` as a troubleshooting shortcut.
 
 Keep `~/.config/qa-clip/identity.json` with this laptop when updating. Never copy a receiver identity/pairing configuration into shared ZIPs or another tester’s installation.
+## Phone-only recording and batch recipients
+
+Android 0.7.0+ can use **Playtest mode → Record & share** without a laptop, Mac pairing or a CLI login on the phone. Keep the normal Android accessibility/microphone/screen-recording consent steps. Each session is saved on the phone; after stopping, **Share a saved batch** opens Android's share sheet. Large sessions have numbered parts. Never clear app data or uninstall to upgrade: the saved batches and unsent laptop clips would be lost.
+
+The recipient needs Playtest Demon **Mac 0.7.0+**, ffmpeg and their chosen signed-in analyst CLI. Use **Import batch** with the shared ZIP; game names and Android reaction/lookback context come from the archive. The recipient's provider, model, queue pause and pairing configuration remain their own. Validate using a synthetic batch first. No recording is sent to an AI provider by exporting on the phone; analysis happens on the recipient's Mac after import (or after they resume a paused queue).

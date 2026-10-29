@@ -1,5 +1,6 @@
 import AppKit
 @preconcurrency import WebKit
+import UniformTypeIdentifiers
 
 @main
 struct PlaytestDemon {
@@ -12,7 +13,7 @@ struct PlaytestDemon {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var process: Process?
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     var testMode = false
     var uiTestMode = false
     var logURL: URL!
+    var feedbackDownloads: [ObjectIdentifier: (temporary: URL, destination: URL)] = [:]
     var deskURL: URL { URL(string: "http://127.0.0.1:\(port)")! }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -216,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc func openBrowser() { NSWorkspace.shared.open(deskURL) }
     @objc func openInbox() { try? FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true); NSWorkspace.shared.open(inbox) }
     @objc func openLogs() { NSWorkspace.shared.open(logURL.deletingLastPathComponent()) }
-    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Playtest Demon", .applicationVersion: "0.6.5", .credits: NSAttributedString(string: "Infinity Games · Speak. Review. Ship. Repeat.")]) }
+    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Playtest Demon", .applicationVersion: "0.7.0", .credits: NSAttributedString(string: "Infinity Games · Speak. Review. Ship. Repeat.")]) }
     @objc func backPage() { if web.canGoBack { web.goBack() } }
     @objc func reloadPage() {
         web.evaluateJavaScript("typeof dirty !== 'undefined' && Object.keys(dirty).length > 0") { value, _ in
@@ -230,9 +232,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if url.scheme == "about" || (url.host == "127.0.0.1" && url.port == port && url.scheme == "http") { decisionHandler(.allow); return }
+        if url.host == "127.0.0.1" && url.port == port && url.scheme == "http" {
+            decisionHandler(navigationAction.shouldPerformDownload ? .download : .allow); return
+        }
+        if url.scheme == "about" { decisionHandler(.allow); return }
         if ["https", "http"].contains(url.scheme?.lowercased() ?? "") { NSWorkspace.shared.open(url) }
         decisionHandler(.cancel)
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let response = navigationResponse.response as? HTTPURLResponse,
+           response.url?.host == "127.0.0.1", response.url?.port == port,
+           response.value(forHTTPHeaderField: "Content-Disposition")?.hasPrefix("attachment;") == true {
+            decisionHandler(.download); return
+        }
+        decisionHandler(.allow)
+    }
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
+              response.mimeType == "application/zip" else {
+            completionHandler(nil); shareNotice("Could not export feedback. Reopen Share feedback and retry."); return
+        }
+        let panel = NSSavePanel(); panel.nameFieldStringValue = suggestedFilename
+        panel.allowedContentTypes = [.zip]; panel.canCreateDirectories = true
+        panel.beginSheetModal(for: window) { result in
+            guard result == .OK, let destination = panel.url else {
+                completionHandler(nil); self.shareNotice("Export cancelled. Your feedback is unchanged."); return
+            }
+            // WebKit requires a new destination. Stage the download before replacing an older export.
+            let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("playtest-feedback-\(UUID().uuidString).zip")
+            self.feedbackDownloads[ObjectIdentifier(download)] = (temporary, destination)
+            completionHandler(temporary)
+        }
+    }
+    func downloadDidFinish(_ download: WKDownload) {
+        guard let paths = feedbackDownloads.removeValue(forKey: ObjectIdentifier(download)) else { return }
+        do {
+            if FileManager.default.fileExists(atPath: paths.destination.path) {
+                _ = try FileManager.default.replaceItemAt(paths.destination, withItemAt: paths.temporary)
+            } else {
+                try FileManager.default.moveItem(at: paths.temporary, to: paths.destination)
+            }
+            shareNotice("ZIP saved. Attach it to your Slack message.")
+        } catch {
+            try? FileManager.default.removeItem(at: paths.temporary)
+            shareNotice("Could not save the ZIP. Try another location: " + error.localizedDescription)
+        }
+    }
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        if let paths = feedbackDownloads.removeValue(forKey: ObjectIdentifier(download)) { try? FileManager.default.removeItem(at: paths.temporary) }
+        if (error as NSError).code != NSURLErrorCancelled { shareNotice("Export failed. Try again: " + error.localizedDescription) }
+    }
+    func shareNotice(_ message: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: [message]), let json = String(data: data, encoding: .utf8) else { return }
+        web.evaluateJavaScript("document.querySelector('#shareStatus').textContent = \(json)[0]", completionHandler: nil)
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }

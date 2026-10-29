@@ -603,7 +603,7 @@ function buildCard() {
           '<span class="hint" style="padding-top:7px">No screenshots</span>'
         }</div></div>
         ${area("note", "Note", "Anything else for the programmer (optional)")}
-        <div class="review-tools"><button class="text-button" onclick="duplicateOpen()">↗ Link duplicate</button><span class="hint">Approval adds this request to a batch; it never starts code changes.</span></div><div class="redo">Need a better draft? <button onclick="redoOpen()">Redo this clip with a hint</button>
+        <div class="review-tools"><button class="text-button" onclick="openShare('${t.id}')">↗ Share request</button><button class="text-button" onclick="duplicateOpen()">↗ Link duplicate</button><span class="hint">Approval adds this request to a batch; it never starts code changes.</span></div><div class="redo">Need a better draft? <button onclick="redoOpen()">Redo this clip with a hint</button>
           <div class="redo-box" id="redo" hidden><input id="redoHint" aria-label="Correction for the analyst" placeholder="e.g. I meant the buttons on the right edge, not the bottom bar" onkeydown="if (event.key === 'Enter') redo()">
           <button class="btn" onclick="redo()">Redo</button></div></div>
         <div class="actions">
@@ -814,7 +814,7 @@ function renderSide() {
             ].includes(r.status),
         );
         const saved = (S.runs || []).slice().reverse().find((r) => canReviewRun(r) && r.repository?.github === repo?.github && r.tickets.every((id) => tr.ids.includes(id)));
-        return `<article class="tray">${saved ? `<div class="run-review-callout"><b>You already have saved agent work for this batch.</b><p>${saved.result.addressed.length} implemented · ${saved.result.unaddressed.length} questions. Continue the existing branch instead of starting over.</p><button class="btn go compact" onclick="go('runs');openRun('${saved.id}')">Review agent notes →</button></div>` : ""}<div class="batch-heading"><div><div class="eyebrow">APPROVED BATCH</div><h2>${esc(tr.game)}</h2><p>${tr.ids.length} human-approved request${tr.ids.length === 1 ? "" : "s"}</p></div><span class="badge done">Ready</span></div>${tr.tickets.map((t) => `<div class="trow"><span class="id">${esc(t.id)}</span><b>${esc(t.title)}</b><button class="text-button" onclick="backToReview('${t.id}')">Edit / unapprove</button></div>`).join("")}<div class="repo-summary"><div><span class="eyebrow">FIXING AGENT</span><b>${repo ? esc(repo.github) : "No repository connected yet"}</b><p>${repo ? esc(repo.provider + " · " + (repo.model || "CLI default") + " · " + repo.base) + (repo.autoMerge ? " · auto merge enabled" : " · PR for review") : "Connect once. Every batch runs in its own branch."}</p></div><button class="btn compact" data-game="${esc(tr.game)}" onclick="connectRepo(this.dataset.game)">${repo ? "Configure" : "Connect repository"}</button></div><div class="batch-actions"><button class="btn" onclick="copyTray(${i})">Copy prompt</button><button class="btn go" ${!repo || inFlight || batchBusy ? "disabled" : ""} onclick="sendBatch(${i})">${batchBusy ? "Starting…" : "Send batch to agent ↗"}</button></div>${inFlight ? '<p class="hint">Finish the active run or its PR before sending another batch to this repository. <button class="text-button" onclick="go(\'runs\')">View fix runs →</button></p>' : ""}<details><summary>What the agent receives</summary><pre>${esc(tr.prompt)}</pre></details></article>`;
+        return `<article class="tray">${saved ? `<div class="run-review-callout"><b>You already have saved agent work for this batch.</b><p>${saved.result.addressed.length} implemented · ${saved.result.unaddressed.length} questions. Continue the existing branch instead of starting over.</p><button class="btn go compact" onclick="go('runs');openRun('${saved.id}')">Review agent notes →</button></div>` : ""}<div class="batch-heading"><div><div class="eyebrow">APPROVED BATCH</div><h2>${esc(tr.game)}</h2><p>${tr.ids.length} human-approved request${tr.ids.length === 1 ? "" : "s"}</p></div><div class="batch-share"><span class="badge done">Ready</span><button class="btn compact" data-game="${esc(tr.game)}" onclick="openShare(null, this.dataset.game)">↗ Share feedback</button></div></div>${tr.tickets.map((t) => `<div class="trow"><span class="id">${esc(t.id)}</span><b>${esc(t.title)}</b><button class="text-button" onclick="backToReview('${t.id}')">Edit / unapprove</button></div>`).join("")}<div class="repo-summary"><div><span class="eyebrow">FIXING AGENT</span><b>${repo ? esc(repo.github) : "No repository connected yet"}</b><p>${repo ? esc(repo.provider + " · " + (repo.model || "CLI default") + " · " + repo.base) + (repo.autoMerge ? " · auto merge enabled" : " · PR for review") : "Connect once. Every batch runs in its own branch."}</p></div><button class="btn compact" data-game="${esc(tr.game)}" onclick="connectRepo(this.dataset.game)">${repo ? "Configure" : "Connect repository"}</button></div><div class="batch-actions"><button class="btn" data-game="${esc(tr.game)}" onclick="openShare(null, this.dataset.game)">↗ Share feedback</button><button class="btn" onclick="copyTray(${i})">Copy prompt</button><button class="btn go" ${!repo || inFlight || batchBusy ? "disabled" : ""} onclick="sendBatch(${i})">${batchBusy ? "Starting…" : "Send batch to agent ↗"}</button></div>${inFlight ? '<p class="hint">Finish the active run or its PR before sending another batch to this repository. <button class="text-button" onclick="go(\'runs\')">View fix runs →</button></p>' : ""}<details><summary>What the agent receives</summary><pre>${esc(tr.prompt)}</pre></details></article>`;
       })
       .join("") ||
     '<div class="empty"><div class="empty-icon">✓</div><h2>Approval comes first.</h2><p>Review each request and approve the ones you want the agent to build. They collect here by game.</p><button class="btn go" onclick="go(\'review\')">Review requests →</button></div>';
@@ -845,6 +845,77 @@ async function copyTray(i) {
     toast(
       'The browser blocked the clipboard. Use Drag, or copy it from "Preview the prompt".',
     );
+}
+
+let shareRequest = 0;
+const shareIds = () => [...document.querySelectorAll('#shareTickets input:checked')].map(el => el.value);
+
+async function openShare(id = null, batchGame = null) {
+  if (!S) return toast('Wait for the desk to connect.');
+  try {
+    await flush();
+    await poll();
+    const single = id && S.tickets.find(t => t.id === id);
+    const game = single ? single.game : (batchGame ?? selectedGame);
+    const tickets = S.tickets.filter(t =>
+      ['draft', 'approved', 'sent', 'fixing', 'fixed', 'verified'].includes(t.status) &&
+      !t.duplicateOf && (!game || t.game === game));
+    const approved = tickets.filter(t => t.status === 'approved');
+    const initial = new Set(id ? [id] : (approved.length ? approved : tickets).map(t => t.id));
+    $('#shareScope').textContent = game || 'All games';
+    $('#shareTickets').innerHTML = tickets.map(t => `<label class="share-ticket"><input type="checkbox" value="${esc(t.id)}" ${initial.has(t.id) ? 'checked' : ''} onchange="updateShare()"><span><b>${esc(t.title)}</b><small>${esc(t.id)} · ${esc(t.game)} · ${esc(t.priority)} · ${t.status === 'draft' ? 'Draft · not yet approved' : esc(t.status)}</small></span></label>`).join('') || '<p>No feedback available yet. Analyse a recording first.</p>';
+    $('#shareDialog').showModal();
+    await updateShare();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function selectShare(checked) {
+  document.querySelectorAll('#shareTickets input').forEach(el => el.checked = checked);
+  updateShare();
+}
+
+async function updateShare() {
+  const request = ++shareRequest, ids = shareIds();
+  $('#shareCount').textContent = `${ids.length} selected`;
+  $('#copyFeedback').disabled = $('#downloadFeedback').disabled = true;
+  $('#shareText').value = '';
+  $('#shareStatus').textContent = ids.length ? 'Preparing feedback…' : 'Select at least one request.';
+  if (!ids.length) return;
+  try {
+    const result = await api('/api/share-preview', { ids });
+    if (request !== shareRequest) return;
+    $('#shareText').value = result.text;
+    $('#shareStatus').textContent = 'Attach the ZIP in Slack so your teammate can see the evidence.';
+    $('#copyFeedback').disabled = $('#downloadFeedback').disabled = false;
+  } catch (e) {
+    if (request === shareRequest) $('#shareStatus').textContent = e.message;
+  }
+}
+
+async function copyFeedback() {
+  const ok = await copyText($('#shareText').value);
+  $('#shareStatus').textContent = ok ? 'Copied. Paste into Slack and attach the ZIP for evidence.' : 'Select the message above and copy it with ⌘C.';
+}
+
+async function downloadFeedback() {
+  const ids = shareIds();
+  if (!ids.length) return;
+  try {
+    // Validate again in case the queue changed while the dialog was open.
+    await api('/api/share-preview', { ids });
+    const query = new URLSearchParams({ ids: ids.join(','), recordings: $('#shareRecordings').checked ? '1' : '0' });
+    const link = document.createElement('a');
+    link.href = '/api/share.zip?' + query;
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    $('#shareStatus').textContent = 'Preparing your ZIP. Large recordings may take a moment before the save starts.';
+  } catch (e) {
+    $('#shareStatus').textContent = e.message;
+  }
 }
 
 async function commit(tr, verb) {
@@ -1090,18 +1161,27 @@ function renderArchive() {
   $("#archive").innerHTML =
     `<section class="archive-block"><h2>Recoverable trash <span>${(S.trash || []).filter(within).length}</span></h2>${rows((S.trash || []).filter(within), (c) => `<div class="srow"><div><b>${esc(c.game)}</b><small>${esc(clipName(c.clip))}</small></div><button class="btn compact" data-clip="${esc(c.clip)}" onclick="restoreClip(this.dataset.clip)">Restore recording</button></div>`, "No recordings in trash.")}</section><section class="archive-block"><h2>Linked duplicates <span>${duplicates.length}</span></h2>${rows(duplicates, (t) => `<div class="srow"><div><b>${esc(t.title)}</b><small>${t.id} → ${esc(t.duplicateOf)} · ${esc(t.game)}</small><details><summary>Retained observation & evidence</summary><p>${esc(t.now)}</p>${(t.shots || []).map((s) => `<button class="text-button" data-file="${esc(s.file)}" onclick="zoom(this.dataset.file)">View screenshot ↗</button>`).join("")}</details></div><button class="btn compact" onclick="unlink('${t.id}')">Separate / restore</button></div>`, "No findings linked as duplicates.")}</section><section class="archive-block"><h2>Rejected requests</h2>${rows(S.rejected.filter(within), (t) => `<div class="srow"><div><b>${esc(t.title)}</b><small>${t.id} · ${esc(t.game)}</small></div><button class="btn compact" onclick="restore('${t.id}')">Review again</button></div>`, "No rejected requests.")}</section><section class="archive-block"><h2>Earlier prompt exports</h2>${rows(S.sent.filter(within), (h) => `<div class="srow"><div><b>${esc(h.game)} · ${h.tickets.length} requests</b><small>${esc(h.at)} · ${h.id}</small></div><button class="text-button" onclick="copySent('${h.id}')">Copy again</button><button class="btn compact" onclick="undoSent('${h.id}')">Return to batch</button></div>`, "No previous exports.")}</section>`;
 }
-function openImport() {
+function openImport(batch = false) {
   if (!S) return;
-  if (!S.games?.length) {
-    addGameOpen();
-    toast("Add your game first, then import its recording.");
-    return;
-  }
-  $("#importGame").innerHTML = (S.games || [])
+  if (upload) return;
+  $("#importGame").innerHTML = '<option value="">Choose game…</option>' + (S.games || [])
     .map((g) => `<option value="${esc(g)}">${esc(g)}</option>`)
     .join("");
   if (selectedGame) $("#importGame").value = selectedGame;
+  $('#importPlatform').value = batch ? 'AndroidBatch' : 'iOS';
+  $('#importFile').value = '';
+  $('#fileName').textContent = batch ? 'Drop a batch ZIP here, or choose a file' : 'Drop a recording here, or choose a file';
+  $('#importStatus').textContent = '';
+  updateImportMode();
   $("#importDialog").showModal();
+}
+function updateImportMode() {
+  const batch = $('#importPlatform').value === 'AndroidBatch';
+  $('#batchGuide').hidden = !batch;
+  $('#recordingGuide').hidden = batch;
+  $('#importGameField').hidden = batch;
+  $('#importGame').required = !batch;
+  $('#importButton').textContent = batch ? 'Import batch & analyse' : 'Import & analyse';
 }
 function closeImport() {
   if (upload) {
@@ -1119,6 +1199,9 @@ function setFile(file) {
   dt.items.add(file);
   $("#importFile").files = dt.files;
   $("#fileName").textContent = file.name;
+  if (/\.zip$/i.test(file.name)) $('#importPlatform').value = 'AndroidBatch';
+  else if ($('#importPlatform').value === 'AndroidBatch') $('#importPlatform').value = 'Imported';
+  updateImportMode();
 }
 $("#dropZone").addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -1144,25 +1227,26 @@ document.addEventListener("drop", (e) => {
 async function importRecording() {
   const file = $("#importFile").files[0],
     game = $("#importGame").value;
-  if (!file || !game || upload) return;
-  if (file.size > 750 * 1024 * 1024) {
-    $("#importStatus").textContent = "Trim your recording under 750 MB first.";
+  const batch = $('#importPlatform').value === 'AndroidBatch';
+  if (!file || (!batch && !game) || upload) return;
+  if (file.size > (batch ? 2048 : 750) * 1024 * 1024) {
+    $("#importStatus").textContent = batch ? 'Choose a batch under 2 GB.' : "Trim your recording under 750 MB first.";
     return;
   }
   $("#importButton").disabled = true;
   $("#importStatus").textContent = "Uploading…";
   const xhr = new XMLHttpRequest();
   upload = xhr;
-  xhr.open("POST", "/api/import");
+  xhr.open("POST", batch ? '/api/import-batch' : "/api/import");
   xhr.setRequestHeader("Content-Type", "application/octet-stream");
   xhr.setRequestHeader("X-Game", encodeURIComponent(game));
   xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
   xhr.setRequestHeader("X-Platform", $("#importPlatform").value);
-  xhr.timeout = 360000;
+  xhr.timeout = batch ? 1200000 : 360000;
   xhr.upload.onprogress = (e) => {
     $("#importStatus").textContent = e.lengthComputable
       ? e.loaded === e.total
-        ? "Preparing the recording for analysis…"
+        ? batch ? 'Checking the batch recordings…' : "Preparing the recording for analysis…"
         : "Uploading " + Math.round((e.loaded / e.total) * 100) + "%"
       : "Uploading…";
   };
@@ -1187,7 +1271,7 @@ async function importRecording() {
     await poll();
     await go("videos");
     toast(
-      r.duplicate
+      batch ? `${r.imported} recording(s) imported · ${r.duplicates} already received.` + (S.settings.paused ? ' Resume the queue when ready.' : ' Analysis starts automatically.') : r.duplicate
         ? "This exact recording is already in your queue. No duplicate was created."
         : S.settings.paused
           ? "Imported. Resume the queue when ready."

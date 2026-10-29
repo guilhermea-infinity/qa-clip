@@ -32,6 +32,7 @@ public final class CaptureService extends Service {
     static final String START = "start", STOP = "stop";
     static final long MAX_CLIP_MS = 180_000;
     static volatile CaptureService I;
+    static volatile boolean finalizing;
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private ExecutorService work;
@@ -40,6 +41,8 @@ public final class CaptureService extends Service {
     private boolean ending, clipping;
     private long sessionStart, clipStart, clipWall;
     private String clipApp, clipGame;
+    private boolean standalone;
+    private File batch;
 
     boolean clipping() { return clipping; }
 
@@ -52,7 +55,7 @@ public final class CaptureService extends Service {
             endSession();
             return START_NOT_STICKY;
         }
-        if (!START.equals(a) || rec != null) return START_NOT_STICKY;
+        if (!START.equals(a) || rec != null || finalizing) return START_NOT_STICKY;
 
         boolean voice = in.getBooleanExtra("voice", false);
         try {
@@ -79,6 +82,8 @@ public final class CaptureService extends Service {
         int[] s = captureSize();
         rec = new Recorder(mp, s[0], s[1], s[2], voice, getSharedPreferences("qaclip", 0).getInt("lookback", 10));
         try {
+            standalone = Batches.standalone(this);
+            if (standalone) batch = Batches.create(this, Games.selected(this));
             rec.start();
         } catch (Exception e) {
             Log.w(Recorder.TAG, "capture start: " + e);
@@ -107,23 +112,28 @@ public final class CaptureService extends Service {
     private void begin() {
         final Recorder r = rec;
         if (r == null) return;
+        if (standalone && Batches.clips(batch).length >= BatchArchive.MAX_CLIPS) {
+            Toast.makeText(this, "Batch full. Stop this session and start a new one.", Toast.LENGTH_LONG).show(); return;
+        }
         clipping = true;
         clipStart = SystemClock.elapsedRealtime();
         clipWall = System.currentTimeMillis();
         clipApp = KeyService.foregroundApp();
         clipGame = Games.selected(this);
-        final File dir = Clips.outbox(this);
-        final String name = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date(clipWall));
+        final File dir = standalone ? batch : Clips.outbox(this);
+        final String name = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date(clipWall))
+                + (standalone ? "-" + java.util.UUID.randomUUID().toString().substring(0, 8) : "");
         Feedback.buzz(this, Feedback.START);
         KeyService.pill(label(), Feedback.RED);
         refreshNote();
         main.postDelayed(tick, 1000);
         work.execute(() -> {
-            if (!r.startClip(dir, name)) main.post(() -> {
+            boolean full = standalone && Batches.clips(batch).length >= BatchArchive.MAX_CLIPS;
+            if (full || !r.startClip(dir, name)) main.post(() -> {
                 if (!clipping) return;
                 clipping = false;
                 main.removeCallbacks(tick);
-                KeyService.flash("No video yet", Feedback.GREY);
+                KeyService.flash(full ? "Batch full · start a new session" : "No video yet", Feedback.GREY);
                 refreshNote();
             });
         });
@@ -145,8 +155,8 @@ public final class CaptureService extends Service {
                 main.post(() -> KeyService.flash("Clip failed", Feedback.GREY));
                 return;
             }
-            Clips.writeMeta(this, c, app, game, wall, r);
-            Uploader.get(this).kick();
+            Clips.writeMeta(this, c, app, game, wall, r, standalone);
+            if (!standalone) Uploader.get(this).kick();
         });
     }
 
@@ -193,9 +203,12 @@ public final class CaptureService extends Service {
         rec = null;
         mp = null;
         if (work != null) {
+            finalizing = true;
             work.execute(() -> {
-                if (r != null) r.stop();
-                if (m != null) m.stop();
+                try {
+                    if (r != null) r.stop();
+                    if (m != null) m.stop();
+                } finally { finalizing = false; }
             });
             work.shutdown();
         } else if (m != null) {

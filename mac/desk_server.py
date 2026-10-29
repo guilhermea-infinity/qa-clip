@@ -9,7 +9,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from desk_games import games
 from desk_models import catalog
 from desk_import import import_recording
+from desk_batch import import_batch
 from desk_runs import preview_repository
+from desk_share import select_tickets, slack_text, build_export
 import subprocess
 from urllib.parse import unquote
 
@@ -22,7 +24,7 @@ def make_handler(store, port):
     origins = {f"http://{h}" for h in hosts}
 
     class H(BaseHTTPRequestHandler):
-        server_version = "PlaytestDemon/0.6.5"
+        server_version = "PlaytestDemon/0.7.0"
 
         def log_message(self, *a):
             pass
@@ -77,7 +79,30 @@ def make_handler(store, port):
                     f.seek(max(0, log.stat().st_size - 16000))
                     return self._json({"text": f.read().decode("utf-8", "replace")})
             if u.path == "/api/health":
-                return self._json({"app": "playtest-demon", "version": "0.6.5", "inbox": str(store.inbox.resolve())})
+                return self._json({"app": "playtest-demon", "version": "0.7.0", "inbox": str(store.inbox.resolve())})
+            if u.path == "/api/share.zip":
+                query = parse_qs(u.query)
+                try:
+                    tickets = select_tickets(store, query.get('ids', [''])[0].split(','))
+                    archive, name = build_export(store, tickets, query.get('recordings', ['1']) == ['1'])
+                except (ValueError, OSError) as exc:
+                    return self._json({'error': str(exc)}, 409)
+                with archive:
+                    archive.seek(0, 2)
+                    size = archive.tell()
+                    archive.seek(0)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/zip')
+                    self.send_header('Content-Disposition', f'attachment; filename="{name}"')
+                    self.send_header('Content-Length', str(size))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    try:
+                        while chunk := archive.read(1 << 20):
+                            self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                return
             if u.path == "/api/state":
                 return self._json(store.state())
             if u.path.startswith("/media/"):
@@ -140,6 +165,12 @@ def make_handler(store, port):
         def do_POST(self):
             if not self._ok_host() or self.headers.get("Origin", next(iter(origins))) not in origins:
                 return self._send(403, "{}")
+            if urlparse(self.path).path == '/api/import-batch':
+                try:
+                    return self._json(import_batch(store, self.rfile, int(self.headers.get('Content-Length', '0')),
+                                                   unquote(self.headers.get('X-Filename', ''))))
+                except (ValueError, OSError, TimeoutError, subprocess.TimeoutExpired) as exc:
+                    return self._json({'error': str(exc)}, 400)
             if urlparse(self.path).path == "/api/import":
                 try:
                     capture = None
@@ -169,6 +200,9 @@ def make_handler(store, port):
                 if not getattr(store, 'runner', None):
                     return self._json({'error': 'Fix runner is not available; restart the desk'}, 409)
             try:
+                if p == '/api/share-preview':
+                    tickets = select_tickets(store, body.get('ids'))
+                    return self._json({'text': slack_text(tickets)})
                 if p == '/api/repository/inspect':
                     return self._json({'ok': True, 'result': preview_repository(body.get('source', ''))})
                 if p == '/api/game/rename':

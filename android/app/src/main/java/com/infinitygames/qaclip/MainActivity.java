@@ -33,16 +33,17 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The only screen: one big button, three status lines, one switch. */
+/** Recorder setup, playtest mode and saved batch sharing. */
 public final class MainActivity extends Activity {
     private static final int BG = 0xFF0D131B, TXT = 0xFFF7F9F9, DIM = 0xFF9DAFC3, OK = 0xFF78D5D7, WARN = 0xFFF3BE76, RED = 0xFFFF938C;
     private static final int PERMS = 1, CAPTURE = 2;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private SharedPreferences sp;
-    private TextView status, keysVal, macVal, clipsVal, gameVal, lookbackVal, lookbackHint;
+    private TextView status, keysVal, macVal, clipsVal, gameVal, lookbackVal, lookbackHint, modeHint, howTo, gameHint, pairingHint;
     private SeekBar lookback;
-    private Button go;
+    private Button go, modeButton, batchesButton;
+    private boolean sharing;
     private Switch voice;
     private float dp;
 
@@ -82,6 +83,14 @@ public final class MainActivity extends Activity {
         status.setPadding(0, px(8), 0, px(24));
         col.addView(status);
 
+        LinearLayout modeCard = card(col);
+        modeCard.addView(text("PLAYTEST MODE", 11, OK, true));
+        modeButton = new Button(this); modeButton.setAllCaps(false); modeButton.setOnClickListener(v -> chooseMode());
+        modeCard.addView(modeButton, new LinearLayout.LayoutParams(-1, -2));
+        modeHint = text("", 13, DIM, false); modeCard.addView(modeHint);
+        batchesButton = new Button(this); batchesButton.setText("Share a saved batch"); batchesButton.setAllCaps(false);
+        batchesButton.setOnClickListener(v -> showBatches()); modeCard.addView(batchesButton, new LinearLayout.LayoutParams(-1, -2));
+
         LinearLayout gameCard = card(col);
         gameCard.addView(text("YOUR GAME", 11, OK, true));
         gameVal = text("", 21, TXT, true);
@@ -93,7 +102,7 @@ public final class MainActivity extends Activity {
         add.setPadding(0, px(8), 0, px(8));
         add.setOnClickListener(v -> addGame());
         gameCard.addView(add);
-        gameCard.addView(text("Shared with Playtest Demon when your Mac is connected.", 12, DIM, false));
+        gameHint = text("", 12, DIM, false); gameCard.addView(gameHint);
 
         go = new Button(this);
         go.setAllCaps(false);
@@ -111,7 +120,7 @@ public final class MainActivity extends Activity {
         keysVal = row(connections, "Volume buttons", v -> openKeys());
         macVal = row(connections, "Mac · tap to pair", v -> chooseMac());
         clipsVal = row(connections, "Clips", null);
-        connections.addView(text("Pair with the code shown on YOUR laptop. Clips never switch to another Mac on the same Wi-Fi.", 12, DIM, false));
+        pairingHint = text("", 12, DIM, false); connections.addView(pairingHint);
 
         LinearLayout capture = card(col);
         capture.addView(text("CAPTURE SETTINGS", 11, OK, true));
@@ -156,10 +165,10 @@ public final class MainActivity extends Activity {
         lookbackHint.setPadding(0, px(10), 0, 0);
         capture.addView(lookbackHint);
 
-        TextView hint = text("HOW IT WORKS\n\nVolume Up   Start a clip, including lookback\nVolume Up   Press again to save & send\nVolume Down   Discard the current clip\n\nPlaytest Demon  /  Android → Mac → your agent", 13, DIM, false);
-        hint.setLineSpacing(px(6), 1f);
-        hint.setPadding(0, px(8), 0, 0);
-        col.addView(hint);
+        howTo = text("", 13, DIM, false);
+        howTo.setLineSpacing(px(6), 1f);
+        howTo.setPadding(0, px(8), 0, 0);
+        col.addView(howTo);
 
         ScrollView root = new ScrollView(this);
         root.setBackgroundColor(BG);
@@ -190,6 +199,16 @@ public final class MainActivity extends Activity {
         boolean keys = KeyService.on();
         CaptureService s = CaptureService.I;
         boolean armed = s != null;
+        boolean standalone = Batches.standalone(this);
+        gameHint.setText(standalone ? "Saved with each recording, ready for your teammate to import." : "Shared with Playtest Demon when your Mac is connected.");
+        pairingHint.setText(standalone ? "Stop the session to share. Your recordings stay on this phone after sharing." : "Pair with the code shown on YOUR laptop. Clips never switch to another Mac on the same Wi-Fi.");
+        modeButton.setText(standalone ? "Record & share  ▾" : "Sync to my Mac  ▾");
+        modeButton.setEnabled(!armed && !CaptureService.finalizing && !sharing);
+        modeHint.setText(standalone ? "No laptop or pairing needed. Each session becomes a batch you can share. Videos stay on this phone." : "Clips are sent automatically to your paired Mac.");
+        int saved = Batches.saved(this).length;
+        batchesButton.setText(sharing ? "Preparing batch…" : "Share a saved batch (" + saved + ")");
+        batchesButton.setEnabled(saved > 0 && !armed && !CaptureService.finalizing && !sharing);
+        howTo.setText("HOW IT WORKS\n\nVolume Up   Start a clip, including lookback\nVolume Up   Press again to " + (standalone ? "save on this phone" : "save & send") + "\nVolume Down   Discard the current clip\n\n" + (standalone ? "Stop session → Share a saved batch → send the ZIP.\nYour teammate imports it in Playtest Demon on their Mac.\nSaved batches remain on this phone after sharing." : "Android → your paired Mac → your agent"));
         voice.setEnabled(!armed);
         lookback.setEnabled(!armed);
         lookbackHint.setText(armed ? "Stop the session to change capture settings." : "Applies when you start a session. Timing may vary slightly to keep the video playable.");
@@ -199,7 +218,8 @@ public final class MainActivity extends Activity {
         else status.setText("Choose your game. Start a QA session.");
         status.setTextColor(armed ? RED : DIM);
 
-        go.setText(armed ? "Stop session" : "Start session");
+        go.setText(armed ? "Stop session" : CaptureService.finalizing ? "Finishing recording…" : "Start session");
+        go.setEnabled(!CaptureService.finalizing && !sharing);
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(px(18));
         bg.setColor(armed ? 0xFF26384B : OK);
@@ -210,11 +230,11 @@ public final class MainActivity extends Activity {
         keysVal.setTextColor(keys ? OK : WARN);
 
         Uploader u = Uploader.get(this);
-        macVal.setText((u.ok ? u.state + "  ✓" : u.state) + "  ›");
-        macVal.setTextColor(u.ok ? OK : WARN);
+        macVal.setText(standalone ? "Not needed in this mode" : (u.ok ? u.state + "  ✓" : u.state) + "  ›");
+        macVal.setTextColor(standalone || u.ok ? OK : WARN);
 
         int n = u.waiting();
-        clipsVal.setText(n == 0 ? "All sent" : n + " waiting");
+        clipsVal.setText(standalone ? saved + " saved batch(es)" : n == 0 ? "All sent" : n + " waiting");
         clipsVal.setTextColor(n == 0 ? TXT : WARN);
     }
 
@@ -232,7 +252,8 @@ public final class MainActivity extends Activity {
     }
 
     private void chooseMac() {
-        if (CaptureService.I != null) {
+        if (Batches.standalone(this)) { Toast.makeText(this, "Switch to Sync to my Mac to pair. Saved batches stay on this phone.", Toast.LENGTH_LONG).show(); return; }
+        if (CaptureService.I != null || CaptureService.finalizing || sharing) {
             Toast.makeText(this, "Stop the session before changing laptops. Your saved clips keep their destination.", Toast.LENGTH_LONG).show(); return;
         }
         Uploader uploader = Uploader.get(this);
@@ -286,13 +307,59 @@ public final class MainActivity extends Activity {
 
     // ---- start / stop ----
 
+    private void chooseMode() {
+        if (CaptureService.I != null || CaptureService.finalizing || sharing) return;
+        new AlertDialog.Builder(this).setTitle("Playtest mode")
+            .setSingleChoiceItems(new String[]{"Sync to my Mac", "Record & share · no laptop"}, Batches.standalone(this) ? 1 : 0, (dialog, which) -> {
+                sp.edit().putBoolean("standalone", which == 1).commit();
+                Uploader.get(this).kick(); dialog.dismiss(); render();
+            }).setNegativeButton("Cancel", null).show();
+    }
+
+    private void showBatches() {
+        if (CaptureService.I != null || CaptureService.finalizing || sharing) return;
+        java.io.File[] batches = Batches.saved(this);
+        List<String> labels = new ArrayList<>();
+        List<java.io.File> choices = new ArrayList<>(); List<Integer> partNumbers = new ArrayList<>();
+        for (java.io.File batch : batches) {
+            try {
+                String date = Batches.info(batch).optString("createdAt");
+                List<List<java.io.File>> parts = Batches.parts(batch);
+                for (int part = 0; part < parts.size(); part++) {
+                    int count = parts.get(part).size();
+                    labels.add(Batches.label(batch) + " · " + count + (count == 1 ? " clip\n" : " clips\n") + date
+                        + (parts.size() > 1 ? " · Part " + (part + 1) + "/" + parts.size() : ""));
+                    choices.add(batch); partNumbers.add(part);
+                }
+            } catch (Exception e) { Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show(); }
+        }
+        new AlertDialog.Builder(this).setTitle("Choose a batch to share")
+            .setItems(labels.toArray(new String[0]), (dialog, which) -> shareBatch(choices.get(which), partNumbers.get(which))).setNegativeButton("Cancel", null).show();
+    }
+
+    private void shareBatch(java.io.File batch, int part) {
+        sharing = true; render();
+        new Thread(() -> {
+            try {
+                java.io.File file = Batches.export(this, batch, part);
+                h.post(() -> {
+                    sharing = false; render();
+                    startActivity(Intent.createChooser(Batches.shareIntent(this, batch, file), "Share playtest batch"));
+                });
+            } catch (Exception e) {
+                h.post(() -> { sharing = false; render(); Toast.makeText(this, "Could not share: " + e.getMessage(), Toast.LENGTH_LONG).show(); });
+            }
+        }, "playtest-share").start();
+    }
+
     private void onGo() {
         if (CaptureService.I != null) {
             startService(new Intent(this, CaptureService.class).setAction(CaptureService.STOP));
             h.postDelayed(this::render, 300);
             return;
         }
-        if (!MacRoute.validCode(Uploader.get(this).macCode())) { chooseMac(); return; }
+        if (CaptureService.finalizing) return;
+        if (!Batches.standalone(this) && !MacRoute.validCode(Uploader.get(this).macCode())) { chooseMac(); return; }
         if (!KeyService.on()) {
             Toast.makeText(this, "Turn on “Playtest Demon volume buttons”, then come back", Toast.LENGTH_LONG).show();
             openKeys();

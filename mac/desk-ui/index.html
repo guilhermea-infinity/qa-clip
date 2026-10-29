@@ -44,6 +44,7 @@
         <div class="breadcrumb" id="pageLabel">Live feed</div>
         <div class="top-actions">
           <span id="deskConnection" class="connection-pill">Connecting…</span
+          ><button id="shareFeedback" class="btn compact" onclick="openShare()">↗ Share feedback</button
           ><button class="settings-button" onclick="openSettings()">
             ⚙ <span id="engineLabel">Analyst</span>
           </button>
@@ -75,6 +76,7 @@
           </div>
           <div class="heading-actions">
             <a class="btn go" href="/playtest" target="_blank" rel="noopener" onclick="this.href='/playtest?game='+encodeURIComponent(selectedGame)">◉ Start playtest session</a>
+            <button class="btn" onclick="openImport(true)">↥ Import batch</button>
             <button class="btn" onclick="openImport()">
               ＋ Import recording</button
             ><button class="btn go" onclick="go('review')">
@@ -157,6 +159,25 @@
         <div id="archive"></div>
       </section>
     </div>
+    <dialog id="shareDialog" aria-labelledby="shareTitle">
+      <div class="dialog-top">
+        <h2 id="shareTitle">Share feedback</h2>
+        <button aria-label="Close sharing" onclick="$('#shareDialog').close()">✕</button>
+      </div>
+      <p id="shareScope"></p>
+      <p>Select requests for your teammate. Drafts are labelled as not yet approved.</p>
+      <div class="share-selection"><button class="text-button" onclick="selectShare(true)">Select all</button><button class="text-button" onclick="selectShare(false)">Clear</button><span id="shareCount" role="status"></span></div>
+      <div id="shareTickets" class="share-tickets"></div>
+      <label class="share-option"><input id="shareRecordings" type="checkbox" checked>Include video recordings (larger ZIP)</label>
+      <p>The ZIP includes a browser report, text feedback and selected screenshots. Extract it, then open report.html.</p>
+      <label for="shareText">Slack message · paste this with the ZIP attached</label>
+      <textarea id="shareText" readonly rows="7"></textarea>
+      <p id="shareStatus" class="hint" role="status"></p>
+      <div class="dialog-actions">
+        <button id="copyFeedback" class="btn" onclick="copyFeedback()">Copy for Slack</button>
+        <button id="downloadFeedback" class="btn go" onclick="downloadFeedback()">Download ZIP</button>
+      </div>
+    </dialog>
     <dialog id="gameDialog">
       <form onsubmit="event.preventDefault();addGame()">
         <div class="dialog-top">
@@ -305,7 +326,7 @@
             ✕
           </button>
         </div>
-        <div class="import-guide">
+        <div class="import-guide" id="recordingGuide">
           <span class="badge">iPhone / iPad</span>
           <ol>
             <li>
@@ -326,21 +347,26 @@
             volume-button trigger. Keep clips under 10 minutes / 750 MB.
           </p>
         </div>
-        <label for="importGame">Game</label
-        ><select id="importGame" required></select
-        ><label for="importPlatform">Recording source</label
-        ><select id="importPlatform">
+        <div id="batchGuide" class="import-guide" hidden>
+          <span class="badge">Android · record & share</span>
+          <p>Choose the ZIP your teammate shared from Playtest Demon. Game names, voice and lookback timing are included. All recordings enter your analysis queue.</p>
+          <p class="hint">Up to 100 recordings / 2 GB. Reimporting the same batch skips recordings already received.</p>
+        </div>
+        <div id="importGameField"><label for="importGame">Game</label><select id="importGame" required></select></div>
+        <label for="importPlatform">Import type</label
+        ><select id="importPlatform" onchange="updateImportMode()">
+          <option value="AndroidBatch">Android recording batch (ZIP)</option>
           <option value="iOS">iPhone / iPad</option>
           <option value="Imported">Desktop or other device</option></select
         ><label class="drop-zone" id="dropZone" for="importFile"
-          ><b id="fileName">Drop a recording here, or choose a file</b
-          ><span>MOV · MP4 · M4V · microphone audio is included</span
+          ><b id="fileName">Drop a recording or batch ZIP here</b
+          ><span>ZIP batch · MOV · MP4 · M4V · microphone audio is included</span
           ><input
             id="importFile"
             type="file"
-            accept="video/mp4,video/quicktime,.mp4,.mov,.m4v"
+            accept="application/zip,video/mp4,video/quicktime,.zip,.mp4,.mov,.m4v"
             required
-            onchange="$('#fileName').textContent=this.files[0]?.name || 'Choose a recording'"
+            onchange="setFile(this.files[0])"
         /></label>
         <p id="importStatus" role="status"></p>
         <div class="dialog-actions">
